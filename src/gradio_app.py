@@ -1,10 +1,9 @@
-import pickle
-
 import gradio as gr
 import matplotlib.pyplot as plt
 import numpy as np
 import skimage
-from PIL import Image
+import cv2
+import joblib
 
 title = "Analiza cyfrowa obrazow - Projekt"
 description = "<center>Showcase of classifiers trained on different approach of feature extraction</center>"
@@ -22,22 +21,18 @@ Proin ornare vel tellus eu mattis. Sed mollis elit mauris. Morbi vel eleifend se
 
 """
 
-svm_hog = pickle.loads(open("../models/svm_96_acc", "rb").read())
+svm_hog = joblib.load("../models/1669842054_LinearSVC_0.918")
+random_forest_hog = joblib.load("../models/1669842100_RandomForestClassifier_0.878")
 
 examples = [
-    [None, "example1.jpg"],
+    [None, "../data/yoga/DATASET/TEST/downdog/00000000.jpg"],
     # [None, "../data/yoga/DATASET/TEST/goddess/00000052.jpg"]
 ]
-
-gpt2 = lambda x: ({"1": 0.99, "2": 0.01}, np.ones((256, 256, 3)))
-gptj6B = lambda x: ({"1": 0.01, "2": 0.99}, np.zeros((256, 256, 3)))
 
 
 def fn(model_choice, img):
     if model_choice == "hog_svm":
-        im = Image.fromarray(img)
-        im = im.convert('RGB')
-        im = im.resize((256, 256), resample=1)
+        im = cv2.resize(img, (256, 256))
         im = np.asarray(im)
 
         fd, hog_image = skimage.feature.hog(im,
@@ -46,13 +41,27 @@ def fn(model_choice, img):
         fd = fd.reshape(1, -1)
         pred = svm_hog.predict(fd)[0]
         return pred, hog_image / 255
+    elif model_choice == "random_forest_hog":
+        im = cv2.resize(img, (256, 256))
+        im = np.asarray(im)
+
+        fd, hog_image = skimage.feature.hog(im,
+                                            visualize=True,
+                                            channel_axis=-1)
+        fd = fd.reshape(1, -1)
+        pred = random_forest_hog.predict_proba(fd)
+        classes = random_forest_hog.classes_
+        out = {k: v for k, v in zip(classes, pred[0])}
+
+        # print(pred)
+        return out, hog_image / 255
     elif model_choice == "some crazy model":
         return gptj6B(0)[0], img
 
 
 gr.Interface(
     fn,
-    [gr.inputs.Dropdown(["hog_svm", "some crazy model"], default='hog_svm'), gr.Image(shape=(128, 128))],
+    [gr.inputs.Dropdown(["hog_svm", "random_forest_hog", "some crazy model"], default='hog_svm'), gr.Image()],
     ["label", "image"],
     examples=examples,
     title=title,
